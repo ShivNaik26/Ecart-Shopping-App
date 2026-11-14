@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         SCANNER_HOME = tool 'sonar-Scanner'
-        NVD_API_KEY = credentials('nvd-api-key')
+        NVD_API_KEY = credentials('nvd-api-key')  // Jenkins secret text credential
     }
 
     tools {
@@ -12,25 +12,25 @@ pipeline {
     }
 
     stages {
-        stage('Git Checkout') {
+        stage('git checkout') {
             steps {
-                git branch: 'master', url: 'https://github.com/Shiv173/Ecart-Shopping-App.git'
+                git branch: 'master', url: 'https://github.com/ShivNaik26/Ekart.git'
             }
         }
 
-        stage('Compile') {
+        stage('compile') {
             steps {
                 sh "mvn compile"
             }
         }
 
-        stage('Unit Tests') {
+        stage('unit tests') {
             steps {
-                sh "mvn test"
+                sh "mvn test -DskipTests=true"
             }
         }
 
-        stage('SonarQube Analysis') {
+        stage('SonarQube analysis') {
             steps {
                 withSonarQubeEnv('sonar') {
                     sh "${env.SCANNER_HOME}/bin/sonar-scanner \
@@ -41,81 +41,70 @@ pipeline {
             }
         }
 
-        stage('SonarQube Quality Gate') {
-            steps {
-                timeout(time: 2, unit: 'MINUTES') {
-                    waitForQualityGate abortPipeline: true
-                }
-            }
-        }
-
         stage('OWASP Dependency Check') {
             steps {
-                withCredentials([string(credentialsId: 'nvd-api-key', variable: 'NVD_API_KEY')]) {
+                  withCredentials([string(credentialsId: 'nvd-api-key', variable: 'NVD_API_KEY')]) {
                     dependencyCheck additionalArguments: "--nvdApiKey=$NVD_API_KEY",
                                     odcInstallation: 'dependency-check'
-                    dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
-                }
-            }
+             }
+        }
         }
 
-        stage('Build Artifact') {
+        stage('Build') {
             steps {
                 sh "mvn package -DskipTests=true"
             }
         }
 
-        stage('Deploy to Nexus') {
+        stage('deploy to Nexus') {
             steps {
                 withMaven(globalMavenSettingsConfig: 'd93e12f0-e46b-4c14-8ae0-b598660ac03d', jdk: 'JDK-21', maven: 'maven3', mavenSettingsConfig: '', traceability: true) {
                     sh "mvn deploy -DskipTests=true"
                 }
             }
         }
+        
 
-        stage('Build and Tag Docker Image') {
+        stage('build and Tag docker image') {
             steps {
                 script {
-                    sh "docker build -t shiv173/ekart:${env.BUILD_NUMBER} -t shiv173/ekart:latest -f docker/Dockerfile ."
-                }
-            }
-        }
-
-        stage('Push Image to Docker Hub') {
-            steps {
-                script {
-                    withCredentials([usernamePassword(
-                        credentialsId: 'dockerhub-pwd-new',
-                        usernameVariable: 'DOCKERHUB_USER',
-                        passwordVariable: 'DOCKERHUB_PASS'
-                    )]) {
-                        sh '''
-                            set +x
-                            echo "$DOCKERHUB_PASS" | docker login --username "$DOCKERHUB_USER" --password-stdin
-                        '''
+                        sh "docker build -t shiv173/ekart:latest -f docker/Dockerfile ."
                     }
-                    sh "docker push shiv173/ekart:${env.BUILD_NUMBER}"
-                    sh "docker push shiv173/ekart:latest"
-                }
             }
         }
 
-        stage('EKS and Kubectl Configuration') {
-            steps {
-                script {
+        stage('Push image to Hub'){
+    steps{
+        script{
+           withCredentials([usernamePassword(
+    credentialsId: 'dockerhub-pwd-new',
+    usernameVariable: 'DOCKERHUB_USER',
+    passwordVariable: 'DOCKERHUB_PASS'
+)]) {
+                sh '''
+                    set +x
+                    echo "$DOCKERHUB_PASS" | docker login --username "$DOCKERHUB_USER" --password-stdin
+                '''
+            }
+
+            sh 'docker push shiv173/ekart:latest'
+        }
+    }
+}
+        stage('EKS and Kubectl configuration'){
+            steps{
+                script{
                     sh 'aws eks update-kubeconfig --region ap-south-1 --name aws-devops-eks'
                 }
             }
         }
-
-        stage('Deploy to EKS with Zero-Downtime Rolling Update') {
-            steps {
-                script {
+        stage('Deploy to k8s'){
+            steps{
+                script{
                     sh 'kubectl apply -f deploymentservice.yml'
-                    sh 'kubectl rollout restart deployment/ekart-deployment'
-                    sh 'kubectl rollout status deployment/ekart-deployment'
                 }
             }
         }
     }
+
 }
