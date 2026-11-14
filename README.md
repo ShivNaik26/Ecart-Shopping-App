@@ -1,182 +1,72 @@
-# DevSecOps CI/CD Pipeline on AWS EKS - E-Cart Application
+# DevSecOps CI/CD Pipeline on AWS EKS – E-Cart Application
 
 ## Project Overview
-End-to-end automated DevSecOps CI/CD pipeline deploying a Java Spring Boot E-Commerce application to **AWS EKS** with integrated security scanning and artifact management.
+This project implements an end-to-end automated **DevSecOps CI/CD Pipeline** to build, scan, package, and deploy a Java Spring Boot E-Commerce web application (**E-Cart**) onto an **AWS EKS (Elastic Kubernetes Service)** cluster. 
 
-## Tech Stack & Architecture
-* **Source Code Management:** GitHub (Webhook-triggered builds)
-* **CI/CD Orchestration:** Jenkins (Declarative Pipeline)
-* **Build Tool:** Apache Maven
-* **Static Code Analysis (SAST):** SonarQube (with Quality Gate enforcement)
-* **Software Composition Analysis (SCA):** OWASP Dependency-Check (NVD API)
-* **Artifact Repository:** Sonatype Nexus (`maven-snapshots` & `maven-releases`)
+The pipeline enforces security and code quality checks at every stage before rolling out zero-downtime updates to production.
+
+---
+
+## Tech Stack & Tools Used
+* **Source Code Management:** GitHub (Webhook-triggered automated builds)
+* **CI/CD Orchestration:** Jenkins (Declarative Pipeline via `Jenkinsfile`)
+* **Build & Unit Testing:** Apache Maven, JUnit, JaCoCo (Code Coverage)
+* **Static Application Security Testing (SAST):** SonarQube (with Quality Gate enforcement)
+* **Software Composition Analysis (SCA):** OWASP Dependency-Check (integrated with NVD API)
+* **Artifact Repository:** Sonatype Nexus (`maven-releases` & `maven-snapshots`)
 * **Containerization:** Docker & Docker Hub
-* **Orchestration & Cloud:** AWS EKS, Kubernetes (`Deployment` with Zero-Downtime Rolling Updates & AWS `LoadBalancer` Service)
+* **Cloud & Container Orchestration:** AWS EKS, Kubernetes (`Deployment` & `LoadBalancer` Service), AWS CLI, `kubectl`
+* **Application Stack:** Java, Spring Boot, Spring Security, Thymeleaf, Spring Data JPA, H2 Database
 
-# Spring Boot Shopping Cart Web App
+---
 
-## About
+## CI/CD Pipeline Architecture (Stages)
 
-This is a demo project for practicing Spring + Thymeleaf. The idea was to build some basic shopping cart web app.
+The `Jenkinsfile` automates the following multi-stage workflow:
 
-It was made using **Spring Boot**, **Spring Security**, **Thymeleaf**, **Spring Data JPA**, **Spring Data REST and Docker**. 
-Database is in memory **H2**.
+1. **Git Checkout:** Pulls the latest source code from the GitHub repository triggered automatically via GitHub Webhooks.
+2. **Compile:** Compiles the Java source code using Maven (`mvn compile`).
+3. **Unit Tests & Coverage:** Executes unit tests (`mvn test`) and generates JaCoCo coverage reports.
+4. **SonarQube Analysis (SAST):** Scans the codebase for bugs, code smells, and security vulnerabilities.
+5. **SonarQube Quality Gate:** Halts the pipeline automatically if the code fails to meet defined quality and security thresholds.
+6. **OWASP Dependency-Check (SCA):** Scans project dependencies against the National Vulnerability Database (NVD) using an NVD API Key to detect known CVEs.
+7. **Build Artifact:** Packages the application into an executable `.jar` file (`mvn package`).
+8. **Deploy to Nexus:** Uploads versioned build artifacts (`shopping-cart-0.0.1-SNAPSHOT.jar`) to the Nexus Maven Repository.
+9. **Build & Tag Docker Image:** Builds an optimized Docker image using `docker/Dockerfile` and tags it with the Jenkins build number and `latest`.
+10. **Push Image to Docker Hub:** Authenticates securely using Jenkins Credentials Manager and pushes the image to Docker Hub.
+11. **EKS & Kubectl Configuration:** Configures `kubeconfig` via AWS CLI to connect to the `aws-devops-eks` cluster in `ap-south-1`.
+12. **Zero-Downtime K8s Deployment:** Applies `deploymentservice.yml` to deploy 2 replicas with a `RollingUpdate` strategy (`maxUnavailable: 0`, `maxSurge: 1`) exposed via an AWS LoadBalancer Service on port `8070`.
 
-There is a login and registration functionality included.
+---
 
-Users can shop for products. Each user has his own shopping cart (session functionality).
-Checkout is transactional.
+## Kubernetes Deployment Details (`deploymentservice.yml`)
+* **Deployment Name:** `ekart-deployment`
+* **Replicas:** `2`
+* **Strategy:** `RollingUpdate` (Zero-downtime deployment)
+* **Service Name:** `ekart-ssvc`
+* **Service Type:** `LoadBalancer`
+* **Application Port:** `8070`
 
-## Configuration
+---
 
-### Configuration Files
+## Running the Application Locally
 
-Folder **src/resources/** contains config files for **shopping-cart** Spring Boot application.
+### 1. Using Maven
+bash
+mvn clean package
+java -jar target/shopping-cart-0.0.1-SNAPSHOT.jar
 
-* **src/resources/application.properties** - main configuration file. Here it is possible to change admin username/password,
-as well as change the port number.
+### 2. Using Docker
+docker build -t ekart:latest -f docker/Dockerfile .
+docker run --rm -i -p 8070:8070 --name ekart ekart:latest
 
-## How to run
+### 3. Accessing the App
+° Application URL: http://localhost:8070/home (or http://<AWS-LOADBALANCER-DNS>:8070/home)
 
-There are several ways to run the application. You can run it from the command line with included Maven Wrapper, Maven or Docker. 
+° H2 Database Console: http://localhost:8070/h2-console (JDBC URL: jdbc:h2:mem:shopping_cart_db)
 
-Once the app starts, go to the web browser and visit `http://localhost:8070/home`
+Default Login Credentials:
 
-Admin username: **admin**
+° Admin: Username: admin | Password: admin
 
-Admin password: **admin**
-
-User username: **user**
-
-User password: **password**
-
-### Maven Wrapper
-
-#### Using the Maven Plugin
-
-Go to the root folder of the application and type:
-```bash
-$ chmod +x scripts/mvnw
-$ scripts/mvnw spring-boot:run
-```
-
-#### Using Executable Jar
-
-Or you can build the JAR file with 
-```bash
-$ scripts/mvnw clean package
-``` 
-
-Then you can run the JAR file:
-```bash
-$ java -jar target/shopping-cart-0.0.1-SNAPSHOT.jar
-```
-
-### Maven
-
-Open a terminal and run the following commands to ensure that you have valid versions of Java and Maven installed:
-
-```bash
-$ java -version
-java version "1.8.0_102"
-Java(TM) SE Runtime Environment (build 1.8.0_102-b14)
-Java HotSpot(TM) 64-Bit Server VM (build 25.102-b14, mixed mode)
-```
-
-```bash
-$ mvn -v
-Apache Maven 3.3.9 (bb52d8502b132ec0a5a3f4c09453c07478323dc5; 2015-11-10T16:41:47+00:00)
-Maven home: /usr/local/Cellar/maven/3.3.9/libexec
-Java version: 1.8.0_102, vendor: Oracle Corporation
-```
-
-#### Using the Maven Plugin
-
-The Spring Boot Maven plugin includes a run goal that can be used to quickly compile and run your application. 
-Applications run in an exploded form, as they do in your IDE. 
-The following example shows a typical Maven command to run a Spring Boot application:
- 
-```bash
-$ mvn spring-boot:run
-``` 
-
-#### Using Executable Jar
-
-To create an executable jar run:
-
-```bash
-$ mvn clean package
-``` 
-
-To run that application, use the java -jar command, as follows:
-
-```bash
-$ java -jar target/shopping-cart-0.0.1-SNAPSHOT.jar
-```
-
-To exit the application, press **ctrl-c**.
-
-### Docker
-
-It is possible to run **shopping-cart** using Docker:
-
-Build Docker image:
-```bash
-$ mvn clean package
-$ docker build -t shopping-cart:dev -f docker/Dockerfile .
-```
-
-Run Docker container:
-```bash
-$ docker run --rm -i -p 8070:8070 \
-      --name shopping-cart \
-      shopping-cart:dev
-```
-
-##### Helper script
-
-It is possible to run all of the above with helper script:
-
-```bash
-$ chmod +x scripts/run_docker.sh
-$ scripts/run_docker.sh
-```
-
-## Docker 
-
-Folder **docker** contains:
-
-* **docker/shopping-cart/Dockerfile** - Docker build file for executing shopping-cart Docker image. 
-Instructions to build artifacts, copy build artifacts to docker image and then run app on proper port with proper configuration file.
-
-## Util Scripts
-
-* **scripts/run_docker.sh.sh** - util script for running shopping-cart Docker container using **docker/Dockerfile**
-
-## Tests
-
-Tests can be run by executing following command from the root of the project:
-
-```bash
-$ mvn test
-```
-
-## Helper Tools
-
-### HAL REST Browser
-
-Go to the web browser and visit `http://localhost:8070/`
-
-You will need to be authenticated to be able to see this page.
-
-### H2 Database web interface
-
-Go to the web browser and visit `http://localhost:8070/h2-console`
-
-In field **JDBC URL** put 
-```
-jdbc:h2:mem:shopping_cart_db
-```
-
-In `/src/main/resources/application.properties` file it is possible to change both
-web interface url path, as well as the datasource url.
+° User: Username: user | Password: password
