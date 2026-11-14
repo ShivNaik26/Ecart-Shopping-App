@@ -1,3 +1,18 @@
+# DevSecOps CI/CD Pipeline on AWS EKS - E-Cart Application
+
+## Project Overview
+End-to-end automated DevSecOps CI/CD pipeline deploying a Java Spring Boot E-Commerce application to **AWS EKS** with integrated security scanning and artifact management.
+
+## Tech Stack & Architecture
+* **Source Code Management:** GitHub (Webhook-triggered builds)
+* **CI/CD Orchestration:** Jenkins (Declarative Pipeline)
+* **Build Tool:** Apache Maven
+* **Static Code Analysis (SAST):** SonarQube (with Quality Gate enforcement)
+* **Software Composition Analysis (SCA):** OWASP Dependency-Check (NVD API)
+* **Artifact Repository:** Sonatype Nexus (`maven-snapshots` & `maven-releases`)
+* **Containerization:** Docker & Docker Hub
+* **Orchestration & Cloud:** AWS EKS, Kubernetes (`Deployment` with Zero-Downtime Rolling Updates & AWS `LoadBalancer` Service)
+
 # Spring Boot Shopping Cart Web App
 
 ## About
